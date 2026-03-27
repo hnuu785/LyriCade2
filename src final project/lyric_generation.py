@@ -8,6 +8,13 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 import os
 
+def get_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
 def remove_standalone_pre(text):
     updated_text = text.replace(' pre ', ' ')
     if updated_text.startswith('pre '):
@@ -51,14 +58,13 @@ def feature_based_generation(model, tokenizer, feature_string, device):
 
 def process_librosa_input(segment_feature_string):
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    new_path = script_dir[:-3]
-    model_load_path = new_path + 'models/gpt2_lyrics_model_50_epochs'
-    tokenizer_load_path = new_path + 'models/gpt2_lyrics_tokenizer_50_epochs'
+    model_load_path = os.path.join(script_dir, '..', 'models', 'gpt2_lyrics_model_50_epochs')
+    tokenizer_load_path = os.path.join(script_dir, '..', 'models', 'gpt2_lyrics_tokenizer_50_epochs')
 
     model = GPT2LMHeadModel.from_pretrained(model_load_path)
 
     tokenizer = GPT2Tokenizer.from_pretrained(tokenizer_load_path)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     model.to(device)
     generated_lyrics = feature_based_generation(model, tokenizer, segment_feature_string, device)
     lyrics_index = generated_lyrics.find("<LYRICS>: ")
