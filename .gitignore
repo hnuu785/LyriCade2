@@ -1,2 +1,11 @@
 __pycache__
 venv
+.ipynb_checkpoints/
+.DS_Store
+
+# Trained model artifacts
+models/
+**/gpt2_lyrics_model_*/
+**/gpt2_lyrics_tokenizer_*/
+**/checkpoint-*/
+*.safetensors
