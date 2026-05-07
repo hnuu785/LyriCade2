@@ -1,5 +1,6 @@
 import argparse
 import random
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -57,6 +58,13 @@ DEFAULT_FEATURES = {
 
 MAX_LENGTH = 512
 MAX_RHYME_POSITIONS = 16
+
+
+def resolve_output_dir(output_dir_arg: str) -> Path:
+    base_output_dir = Path(output_dir_arg).resolve()
+    dated_output_dir = base_output_dir / datetime.now().strftime("%Y-%m-%d")
+    dated_output_dir.mkdir(parents=True, exist_ok=True)
+    return dated_output_dir
 
 
 class LyricsFeatureDataset(Dataset):
@@ -216,8 +224,7 @@ def train(args):
     set_seed(args.seed)
 
     csv_path = Path(args.csv).resolve()
-    output_dir = Path(args.output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = resolve_output_dir(args.output_dir)
 
     df = load_cleaned_dataset(csv_path)
     train_df, val_df = split_and_scale(df, seed=args.seed, val_ratio=args.val_ratio)
@@ -225,6 +232,7 @@ def train(args):
     print(f"Loaded {len(df)} rows from {csv_path}")
     print(f"Train rows: {len(train_df)}")
     print(f"Validation rows: {len(val_df)}")
+    print(f"Saving checkpoints under {output_dir}")
 
     tokenizer = GPT2TokenizerFast.from_pretrained(args.model_name, local_files_only=args.local_files_only)
     model = GPT2LMHeadModel.from_pretrained(args.model_name, local_files_only=args.local_files_only)

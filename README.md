@@ -25,10 +25,17 @@ README.md
 ## Install
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m pip install --upgrade pip
+python3 -m pip install -r requirements.txt
 ```
+
+macOS 메모:
+
+- Apple Silicon/macOS 환경에서는 `torch` wheel 설치가 오래 걸리거나 환경에 따라 별도 안내가 필요할 수 있다.
+- `pip install -r requirements.txt` 중 `torch` 설치가 실패하면 먼저 PyTorch 공식 설치 가이드를 따라 `torch`를 설치한 뒤, 나머지 패키지를 다시 설치하는 편이 안전하다.
+- 가상환경을 쓰지 않으면 시스템 Python과 패키지가 섞이기 쉬우니 `.venv` 사용을 권장한다.
 
 ## 1) Prepare Dataset
 
@@ -67,6 +74,9 @@ python -m pipeline.train \
   --batch-size 4
 ```
 
+실제 저장 경로는 `--output-dir/YYYY-MM-DD/` 형태다. 예를 들어 2026년 5월 7일에 실행하면
+`/absolute/path/to/outputs/korean-lyrics-gpt2/2026-05-07/` 아래에 체크포인트가 저장된다.
+
 현재 학습 스크립트 특징:
 
 - 숫자형 음악 feature를 프롬프트 토큰으로 직렬화
@@ -77,8 +87,8 @@ python -m pipeline.train \
 
 ```bash
 python -m pipeline.generate \
-  --model-dir /absolute/path/to/outputs/korean-lyrics-gpt2/final_model \
-  --tokenizer-dir /absolute/path/to/outputs/korean-lyrics-gpt2/final_tokenizer \
+  --model-dir /absolute/path/to/outputs/korean-lyrics-gpt2/2026-05-07/final_model \
+  --tokenizer-dir /absolute/path/to/outputs/korean-lyrics-gpt2/2026-05-07/final_tokenizer \
   --artist dynamicduo \
   --track-genre k-rap \
   --tempo 118 \
