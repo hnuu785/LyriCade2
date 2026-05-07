@@ -11,4 +11,5 @@ models/
 **/checkpoint-*/
 *.safetensors
 outputs/
+archive/
 *.ipynb
