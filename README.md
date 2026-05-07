@@ -1,81 +1,92 @@
-# See demo video!! 
-https://drive.google.com/file/d/15MBqnywTcsLUESPE3Lzdo30UwexcBI27/view?ts=65f3dfdb
-![demo](https://github.com/rhea-mal/LyricGeneration/assets/70975260/44cfb7b0-4d70-41fa-8afd-3513f7948f1e)
+# Korean Lyric Fine-Tuning Pipeline
 
-# Lyricade
+이 저장소는 한국어 가사 생성을 위한 LLM 파인튜닝 실험에 집중하도록 정리했다.  
+기존 데모 앱, 오디오 특성 추출 노트북, 학기 프로젝트 산출물은 실행 경로에서 분리하고, 현재는 아래 세 단계만 유지한다.
 
-Welcome to the Lyricade repository! Lyricade is an innovative lyric generation tool that integrates detailed acoustic characteristics with lyrical creativity, powered by machine learning. Our model employs instrumental tracks and contextual cues, fine-tuning on a diverse dataset to produce lyrics that resonate with the musical essence and style of any specified artist.
+1. 데이터 정제 및 verse 추출
+2. feature-conditioned GPT 계열 모델 파인튜닝
+3. 저장된 체크포인트로 샘플 가사 생성
 
-## Repository Structure
+## Active Structure
 
-This repository is organized into several key directories, each containing essential components of Lyricade:
-
-- **Acoustics/**: Contains Jupyter notebooks for feature extraction using the Librosa library. These notebooks detail our methodology for analyzing audio tracks and extracting meaningful acoustic features that contribute to the lyric generation process.
-
-- **Src/**: This directory holds the source code for training and testing our model. It includes Python scripts for setting up the model, training on our dataset, and evaluating its performance.
-
-- **Datasets/**: Here, you will find cleaned and compiled CSV files that make up our dataset. These files include lyrics, artist names, song titles, and extracted acoustic features.
-
-### Getting Started
-
-To begin using Lyricade, clone this repository to your local machine:
-
-```bash
-git clone https://github.com/rhea-mal/Lyricade.git
+```text
+pipeline/
+  prepare_dataset.py
+  rhyme.py
+  train.py
+  generate.py
+datasets/
+requirements.txt
+README.md
 ```
 
-### Prerequisites
+`archive/` 는 기존 실험 자산을 옮겨두는 보관 위치다. 학습 파이프라인 실행에는 필요하지 않다.
 
-Before running the notebooks or scripts, ensure you have the following dependencies installed:
-
-- Python 3.8+
-- Librosa
-- PyTorch
-- Transformers by Hugging Face
-- Pandas
-- NumPy
-
-You can install these dependencies via pip:
+## Install
 
 ```bash
-pip install librosa torch transformers pandas numpy
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### Using the Feature Extraction Notebooks
+## 1) Prepare Dataset
 
-Navigate to the `Acoustics/` directory and open the Jupyter notebooks in your preferred environment. These notebooks will guide you through the process of extracting acoustic features from audio files using Librosa.
+입력 CSV는 최소한 아래 컬럼을 가져야 한다.
 
-### Training and Testing the Model
+- `title`
+- `artist`
+- `lyrics`
+- `bpm`
+- `energy`
+- `danceability`
+- `loudness`
+- `valence`
 
-To train the most advanced model, navigate to the `Src_final/` directory and run the training notebook.
-
-To train the basic model, navigate to the `Src/` directory and run the training script:
+verse 구간만 남긴 학습용 CSV를 만들려면:
 
 ```bash
-python train.py
+python -m pipeline.prepare_dataset \
+  --input /absolute/path/to/train_kor_data.csv \
+  --output /absolute/path/to/train_kor_data_annotated.csv \
+  --strict-output /absolute/path/to/train_kor_data_verse_only.csv \
+  --fallback-output /absolute/path/to/train_kor_data_verse_fallback.csv
 ```
 
-After training, you can test the model's performance on unseen data:
+- `strict-output`: `[Verse]` 같은 태그가 있는 가사만 사용
+- `fallback-output`: 태그가 없는 가사는 원문 전체를 유지
+
+## 2) Train
 
 ```bash
-python test.py
+python -m pipeline.train \
+  --csv /absolute/path/to/train_kor_data_verse_only.csv \
+  --output-dir /absolute/path/to/outputs/korean-lyrics-gpt2 \
+  --model-name gpt2 \
+  --epochs 2 \
+  --batch-size 4
 ```
 
-### Dataset
+현재 학습 스크립트 특징:
 
-The `Datasets/` directory contains the data used for training and testing Lyricade. This includes pre-processed and cleaned data, ready for machine learning applications.
+- 숫자형 음악 feature를 프롬프트 토큰으로 직렬화
+- 한국어 라임 유사도를 반영한 보조 loss 사용
+- `best_model`, `best_tokenizer`, `final_model`, `final_tokenizer` 저장
 
-The lyrics dataframe is constructed by merging and normalizing data across various datasets, including Genius Song Lyrics with Language Information{https://www.kaggle.com/datasets/carlosgdcj/genius-song-lyrics-with-language-information}, Song Lyrics Dataset{https://www.kaggle.com/datasets/deepshah16/song-lyrics-dataset}, and Lyrics Generation Dataset{https://www.kaggle.com/datasets/pratiksaha198/lyrics-generation?select=LYRICS_DATASET.csv}.
-    We used another Kaggle Exploring Spotify {https://www.kaggle.com/code/alankarmahajan/exploring-spotify-dataset} features dataset with pre-extracted acoustic features resulting in a combined dataset of 1153 rows and 22 columns containing song metadata, acoustic features, and lyrics.
+## 3) Generate
 
-## Contributing
+```bash
+python -m pipeline.generate \
+  --model-dir /absolute/path/to/outputs/korean-lyrics-gpt2/final_model \
+  --tokenizer-dir /absolute/path/to/outputs/korean-lyrics-gpt2/final_tokenizer \
+  --artist dynamicduo \
+  --track-genre k-rap \
+  --tempo 118 \
+  --energy 0.4 \
+  --valence 0.1
+```
 
-We welcome contributions to Lyricade! If you have suggestions for improvements or new features, please feel free to fork the repository, make your changes, and submit a pull request.
+## Notes
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-Thank you for exploring Lyricade. We hope this tool inspires you to create beautiful, musically-aligned lyrics using the power of machine learning.
+- 현재 기본 베이스 모델은 `gpt2`다. 한국어 성능이 목적이면 이후에는 한국어 tokenizer/model 계열로 교체하는 편이 맞다.
+- 기존 실험 코드가 필요하면 `archive/` 에서 다시 꺼내면 된다.

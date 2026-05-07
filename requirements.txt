@@ -1,20 +1,6 @@
-librosa
-matplotlib
-nltk
 numpy
 pandas
-rouge-score
-sacrebleu
 scikit-learn
-scipy
-streamlit
-streamlit-extras
 torch
 tqdm
 transformers
-
-# Optional notebook dependency used in acoustics/feature_extraction.ipynb
-audioflux
-
-# Optional dataset utility used in data/create_table.ipynb
-datasets

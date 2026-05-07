@@ -1,5 +1,6 @@
 __pycache__
 venv
+venv_broken
 .ipynb_checkpoints/
 .DS_Store
 
@@ -9,3 +10,5 @@ models/
 **/gpt2_lyrics_tokenizer_*/
 **/checkpoint-*/
 *.safetensors
+outputs/
+*.ipynb
