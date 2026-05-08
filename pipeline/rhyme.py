@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 
 WORD_RE = re.compile(r"[가-힣]+")
-LYRICS_MARKER = "<LYRICS>: "
+LYRICS_MARKER = "<LYRICS>:"
 HANGUL_BASE = 0xAC00
 HANGUL_END = 0xD7A3
 NUM_JUNGSEONG = 21
@@ -148,14 +148,15 @@ def _extract_line_end_spans(sequence: str, marker: str = LYRICS_MARKER) -> List[
         lyrics = sequence
     else:
         lyrics_start = marker_index + len(marker)
+        if lyrics_start < len(sequence) and sequence[lyrics_start] == " ":
+            lyrics_start += 1
         lyrics = sequence[lyrics_start:]
 
-    normalized_lyrics = normalize_lyrics_for_rhyme(lyrics)
-    if not normalized_lyrics:
+    if not lyrics.strip():
         return []
 
     spans = []
-    for line_match in re.finditer(r"[^\n]+", normalized_lyrics):
+    for line_match in re.finditer(r"[^\n]+", lyrics):
         words = list(WORD_RE.finditer(line_match.group(0)))
         if not words:
             continue

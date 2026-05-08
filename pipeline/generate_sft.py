@@ -2,24 +2,10 @@ import argparse
 from pathlib import Path
 
 import torch
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+from peft import PeftConfig, PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-
-NUMERICAL_COLUMNS = [
-    "DURATION_MS",
-    "POPULARITY",
-    "DANCEABILITY",
-    "ENERGY",
-    "LOUDNESS",
-    "ACOUSTICNESS",
-    "INSTRUMENTALNESS",
-    "LIVENESS",
-    "VALENCE",
-    "TEMPO",
-    "EXPLICIT",
-]
-
-CATEGORICAL_COLUMNS = ["ARTIST", "TRACK_GENRE"]
+from pipeline.features import FEATURE_STATE_FILENAME, build_prompt, load_feature_state, transform_inference_features
 
 
 def get_device():
@@ -31,7 +17,7 @@ def get_device():
 
 
 def build_feature_prompt(args):
-    numerical_values = {
+    raw_values = {
         "DURATION_MS": args.duration_ms,
         "POPULARITY": args.popularity,
         "DANCEABILITY": args.danceability,
@@ -43,23 +29,19 @@ def build_feature_prompt(args):
         "VALENCE": args.valence,
         "TEMPO": args.tempo,
         "EXPLICIT": args.explicit,
-    }
-    categorical_values = {
         "ARTIST": args.artist,
         "TRACK_GENRE": args.track_genre,
     }
-
-    feature_string = " ".join(
-        [f"<{column}: {numerical_values[column]:.2f}>" for column in NUMERICAL_COLUMNS]
-        + [f"<{column}: {categorical_values[column]}>" for column in CATEGORICAL_COLUMNS]
-    )
-    return f"{feature_string} <LYRICS>:"
+    transformed_values = transform_inference_features(raw_values, args.feature_state)
+    return build_prompt(transformed_values)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Generate Korean lyrics from a fine-tuned checkpoint.")
-    parser.add_argument("--model-dir", required=True, help="Path to the saved model directory.")
-    parser.add_argument("--tokenizer-dir", help="Optional tokenizer directory. Defaults to --model-dir.")
+    parser = argparse.ArgumentParser(description="Generate lyrics from a LoRA SFT adapter checkpoint.")
+    parser.add_argument("--adapter-dir", required=True, help="Path to the saved LoRA adapter directory.")
+    parser.add_argument("--base-model", help="Optional base model name/path. Defaults to adapter config.")
+    parser.add_argument("--tokenizer-dir", help="Optional tokenizer directory. Defaults to adapter parent/final_tokenizer.")
+    parser.add_argument("--feature-config", help="Optional feature transform JSON. Defaults to the adapter parent dir.")
     parser.add_argument("--artist", default="unknown", help="Artist conditioning token.")
     parser.add_argument("--track-genre", default="k-rap", help="Genre conditioning token.")
     parser.add_argument("--duration-ms", type=float, default=211361.0)
@@ -79,18 +61,29 @@ def parse_args():
     parser.add_argument("--temperature", type=float, default=0.9)
     parser.add_argument("--top-k", type=int, default=50)
     parser.add_argument("--top-p", type=float, default=0.92)
+    parser.add_argument("--local-files-only", action="store_true")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    model_dir = Path(args.model_dir).resolve()
-    tokenizer_dir = Path(args.tokenizer_dir).resolve() if args.tokenizer_dir else model_dir
+    adapter_dir = Path(args.adapter_dir).resolve()
+    tokenizer_dir = Path(args.tokenizer_dir).resolve() if args.tokenizer_dir else adapter_dir.parent / "final_tokenizer"
+    feature_config = Path(args.feature_config).resolve() if args.feature_config else adapter_dir.parent / FEATURE_STATE_FILENAME
+    args.feature_state = load_feature_state(feature_config)
 
-    tokenizer = GPT2TokenizerFast.from_pretrained(tokenizer_dir)
-    model = GPT2LMHeadModel.from_pretrained(model_dir)
-    tokenizer.pad_token = tokenizer.eos_token
-    model.config.pad_token_id = tokenizer.eos_token_id
+    peft_config = PeftConfig.from_pretrained(adapter_dir)
+    base_model_name = args.base_model or peft_config.base_model_name_or_path
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, local_files_only=args.local_files_only)
+    model = AutoModelForCausalLM.from_pretrained(base_model_name, local_files_only=args.local_files_only)
+    model = PeftModel.from_pretrained(model, adapter_dir, local_files_only=args.local_files_only)
+
+    if tokenizer.pad_token is None:
+        if tokenizer.eos_token is None:
+            raise ValueError("Tokenizer must define either a pad token or an eos token.")
+        tokenizer.pad_token = tokenizer.eos_token
+    model.config.pad_token_id = tokenizer.pad_token_id
 
     device = get_device()
     model.to(device)
