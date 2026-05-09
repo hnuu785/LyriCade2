@@ -10,11 +10,22 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RUNS_DIR = PROJECT_ROOT / "experiments" / "runs"
-REPORTS_DIR = PROJECT_ROOT / "experiments" / "reports"
-METRICS_DIR = PROJECT_ROOT / "experiments" / "metrics"
-PLOTS_DIR = PROJECT_ROOT / "experiments" / "plots"
-INDEX_PATH = PROJECT_ROOT / "experiments" / "index.jsonl"
+
+
+def resolve_storage_root() -> Path:
+    drive_root = Path("/content/drive/MyDrive")
+    if drive_root.exists():
+        return drive_root / PROJECT_ROOT.name
+    return PROJECT_ROOT
+
+
+STORAGE_ROOT = resolve_storage_root()
+RUNS_DIR = STORAGE_ROOT / "experiments" / "runs"
+REPORTS_DIR = STORAGE_ROOT / "experiments" / "reports"
+METRICS_DIR = STORAGE_ROOT / "experiments" / "metrics"
+PLOTS_DIR = STORAGE_ROOT / "experiments" / "plots"
+INDEX_PATH = STORAGE_ROOT / "experiments" / "index.jsonl"
+DEFAULT_OUTPUT_DIR = STORAGE_ROOT / "outputs" / "qwen-1_5b-lyrics-sft"
 
 
 def ensure_dirs():
@@ -40,7 +51,11 @@ def parse_args():
     parser.add_argument("--goal", required=True, help="Short goal for this run.")
     parser.add_argument("--notes", default="", help="Optional hypothesis or operator note.")
     parser.add_argument("--csv", required=True, help="Training CSV path.")
-    parser.add_argument("--output-dir", required=True, help="Base output directory for training artifacts.")
+    parser.add_argument(
+        "--output-dir",
+        default=str(DEFAULT_OUTPUT_DIR),
+        help="Base output directory for training artifacts.",
+    )
     parser.add_argument("--base-model", required=True, help="Base model name/path.")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=1)

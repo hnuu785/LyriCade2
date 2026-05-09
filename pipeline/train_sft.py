@@ -23,6 +23,19 @@ from pipeline.features import (
 )
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def resolve_storage_root() -> Path:
+    drive_root = Path("/content/drive/MyDrive")
+    if drive_root.exists():
+        return drive_root / PROJECT_ROOT.name
+    return PROJECT_ROOT
+
+
+STORAGE_ROOT = resolve_storage_root()
+
+
 def resolve_output_dir(output_dir_arg: str) -> Path:
     base_output_dir = Path(output_dir_arg).resolve()
     dated_output_dir = base_output_dir / datetime.now().strftime("%Y-%m-%d")
@@ -202,9 +215,21 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train a conditional Korean lyric SFT model with LoRA.")
     parser.add_argument("--experiment-id", default="adhoc", help="Identifier used for metrics CSV and plots.")
     parser.add_argument("--csv", required=True, help="Path to the training CSV.")
-    parser.add_argument("--output-dir", default="outputs/sft-run", help="Directory where checkpoints will be saved.")
-    parser.add_argument("--metrics-dir", default="experiments/metrics", help="Directory where training/eval CSV logs will be saved.")
-    parser.add_argument("--plots-dir", default="experiments/plots", help="Directory where training plots will be saved.")
+    parser.add_argument(
+        "--output-dir",
+        default=str(STORAGE_ROOT / "outputs" / "sft-run"),
+        help="Directory where checkpoints will be saved.",
+    )
+    parser.add_argument(
+        "--metrics-dir",
+        default=str(STORAGE_ROOT / "experiments" / "metrics"),
+        help="Directory where training/eval CSV logs will be saved.",
+    )
+    parser.add_argument(
+        "--plots-dir",
+        default=str(STORAGE_ROOT / "experiments" / "plots"),
+        help="Directory where training plots will be saved.",
+    )
     parser.add_argument("--model-name", default="gpt2", help="Base Hugging Face model name or local model path.")
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch-size", type=int, default=2)
