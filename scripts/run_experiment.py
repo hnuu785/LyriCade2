@@ -239,6 +239,12 @@ def append_index(summary):
         fp.write(json.dumps(summary, ensure_ascii=False) + "\n")
 
 
+def build_record_stem(experiment_id, status):
+    if status == "failed":
+        return f"{experiment_id}-failed"
+    return experiment_id
+
+
 def format_code_block(language, content):
     return f"```{language}\n{content.rstrip()}\n```"
 
@@ -527,15 +533,17 @@ def main():
                 }
             )
 
-    run_path = RUNS_DIR / f"{experiment_id}.json"
+    record_stem = build_record_stem(experiment_id, run_record["status"])
+
+    run_path = RUNS_DIR / f"{record_stem}.json"
     with run_path.open("w", encoding="utf-8") as fp:
         json.dump(run_record, fp, ensure_ascii=False, indent=2)
 
-    report_path = REPORTS_DIR / f"{experiment_id}.md"
+    report_path = REPORTS_DIR / f"{record_stem}.md"
     with report_path.open("w", encoding="utf-8") as fp:
         fp.write(build_markdown_report(run_record))
 
-    notion_report_path = REPORTS_DIR / f"{experiment_id}-notion.md"
+    notion_report_path = REPORTS_DIR / f"{record_stem}-notion.md"
     with notion_report_path.open("w", encoding="utf-8") as fp:
         fp.write(build_notion_summary(run_record))
 
