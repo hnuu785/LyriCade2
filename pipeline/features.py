@@ -49,6 +49,7 @@ DEFAULT_FEATURES = {
 
 REQUIRED_COLUMNS = {"TITLE", "ARTIST", "LYRICS", "BPM", "ENERGY", "DANCEABILITY", "LOUDNESS", "VALENCE"}
 FEATURE_STATE_FILENAME = "feature_transform.json"
+STYLE_TAG = "bilingual korean-english rap verse"
 LYRICS_MARKER = "<LYRICS>:"
 
 
@@ -107,6 +108,7 @@ def fit_feature_transform(train_df):
         "defaults": DEFAULT_FEATURES,
         "means": means,
         "scales": scales,
+        "style_tag": STYLE_TAG,
         "prompt_marker": LYRICS_MARKER,
     }
 
@@ -122,11 +124,11 @@ def apply_feature_transform(df, feature_state):
 
 
 def build_prompt(feature_values):
-    feature_string = " ".join(
-        [f"<{column}: {feature_values[column]:.2f}>" for column in NUMERICAL_COLUMNS]
-        + [f"<{column}: {feature_values[column]}>" for column in CATEGORICAL_COLUMNS]
-    )
-    return f"{feature_string} {LYRICS_MARKER}"
+    prompt_lines = [f"<{column}: {feature_values[column]:.2f}>" for column in NUMERICAL_COLUMNS]
+    prompt_lines.extend(f"<{column}: {feature_values[column]}>" for column in CATEGORICAL_COLUMNS)
+    prompt_lines.append(f"<STYLE: {STYLE_TAG}>")
+    prompt_lines.append(LYRICS_MARKER)
+    return "\n".join(prompt_lines)
 
 
 def build_training_sequence(row):
