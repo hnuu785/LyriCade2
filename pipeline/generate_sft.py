@@ -1,4 +1,5 @@
 import argparse
+import re
 from pathlib import Path
 
 import torch
@@ -36,6 +37,47 @@ def build_feature_prompt(args):
     return build_prompt(transformed_values)
 
 
+def _split_line(line: str):
+    segments = [segment.strip() for segment in re.split(r"(?<=[,?!.;])\s+|,\s+|(?<=\))\s+", line) if segment.strip()]
+    return segments or [line.strip()]
+
+
+def _split_longest_line(lines):
+    if not lines:
+        return lines
+
+    longest_index = max(range(len(lines)), key=lambda idx: len(lines[idx].split()))
+    words = lines[longest_index].split()
+    if len(words) < 2:
+        return lines
+
+    midpoint = max(1, len(words) // 2)
+    replacement = [" ".join(words[:midpoint]).strip(), " ".join(words[midpoint:]).strip()]
+    return lines[:longest_index] + replacement + lines[longest_index + 1 :]
+
+
+def format_generated_lyrics(text: str, line_count: int) -> str:
+    raw_lines = [line.strip() for line in text.replace("\r", "\n").split("\n") if line.strip()]
+
+    lines = []
+    for raw_line in raw_lines:
+        lines.extend(_split_line(raw_line))
+
+    if not lines:
+        return ""
+
+    while len(lines) < line_count:
+        updated_lines = _split_longest_line(lines)
+        if updated_lines == lines:
+            break
+        lines = [line for line in updated_lines if line.strip()]
+
+    if len(lines) > line_count:
+        lines = lines[:line_count]
+
+    return "\n".join(line.strip() for line in lines if line.strip())
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate lyrics from a LoRA SFT adapter checkpoint.")
     parser.add_argument("--adapter-dir", required=True, help="Path to the saved LoRA adapter directory.")
@@ -61,6 +103,7 @@ def parse_args():
     parser.add_argument("--temperature", type=float, default=0.9)
     parser.add_argument("--top-k", type=int, default=50)
     parser.add_argument("--top-p", type=float, default=0.92)
+    parser.add_argument("--line-count", type=int, default=8, help="Number of lyric lines/bars to format in the output.")
     parser.add_argument("--local-files-only", action="store_true")
     return parser.parse_args()
 
@@ -105,7 +148,8 @@ def main():
     )
     decoded = tokenizer.decode(output[0], skip_special_tokens=True)
     generated = decoded.split("<LYRICS>:", maxsplit=1)[-1].strip()
-    print(generated)
+    formatted = format_generated_lyrics(generated, line_count=args.line_count)
+    print(formatted)
 
 
 if __name__ == "__main__":

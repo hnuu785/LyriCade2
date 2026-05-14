@@ -74,6 +74,7 @@ def parse_args():
     parser.add_argument("--sample-tempo", action="append", dest="sample_tempos", type=float, default=[])
     parser.add_argument("--sample-energy", action="append", dest="sample_energies", type=float, default=[])
     parser.add_argument("--sample-valence", action="append", dest="sample_valences", type=float, default=[])
+    parser.add_argument("--sample-line-count", type=int, default=8, help="Number of lyric lines/bars to format in generated samples.")
     parser.add_argument("--num-beams", type=int, default=4)
     parser.add_argument("--temperature", type=float, default=0.9)
     parser.add_argument("--top-k", type=int, default=50)
@@ -233,6 +234,8 @@ def build_generate_command(artifact_dir, request, args):
         str(request["energy"]),
         "--valence",
         str(request["valence"]),
+        "--line-count",
+        str(args.sample_line_count),
         "--max-length",
         str(args.max_length),
         "--num-beams",
@@ -397,6 +400,7 @@ def build_notion_summary(run_record):
         f"- 데이터: `{Path(config['csv']).name}` {metrics.get('dataset_rows', '')}행",
         f"- 학습 설정: epoch {config['epochs']}, batch size {config['batch_size']}, gradient accumulation {config['gradient_accumulation_steps']}, max length {config['max_length']}",
         f"- 생성 설정: max length {config['max_length']}",
+        f"- 생성 라인 수: {config.get('sample_line_count', '')}",
         "",
         "### 실행",
         "",
@@ -495,6 +499,7 @@ def main():
                 "lora_r": args.lora_r,
                 "lora_alpha": args.lora_alpha,
                 "lora_dropout": args.lora_dropout,
+                "sample_line_count": args.sample_line_count,
                 "local_files_only": args.local_files_only,
                 "mps_fallback": args.mps_fallback,
             },
