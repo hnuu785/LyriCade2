@@ -79,10 +79,11 @@ def format_generated_lyrics(text: str, line_count: int) -> str:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Generate lyrics from a LoRA SFT adapter checkpoint.")
-    parser.add_argument("--adapter-dir", required=True, help="Path to the saved LoRA adapter directory.")
-    parser.add_argument("--base-model", help="Optional base model name/path. Defaults to adapter config.")
-    parser.add_argument("--tokenizer-dir", help="Optional tokenizer directory. Defaults to adapter parent/final_tokenizer.")
+    parser = argparse.ArgumentParser(description="Generate lyrics from either a LoRA SFT adapter checkpoint or a base model.")
+    parser.add_argument("--adapter-dir", help="Path to the saved LoRA adapter directory.")
+    parser.add_argument("--base-model", help="Base model name/path. Required when using --base-model-only.")
+    parser.add_argument("--base-model-only", action="store_true", help="Run generation with the base model only, without loading a LoRA adapter.")
+    parser.add_argument("--tokenizer-dir", help="Optional tokenizer directory. Defaults to adapter parent/final_tokenizer, or the base model in --base-model-only mode.")
     parser.add_argument("--feature-config", help="Optional feature transform JSON. Defaults to the adapter parent dir.")
     parser.add_argument("--artist", default="unknown", help="Artist conditioning token.")
     parser.add_argument("--track-genre", default="k-rap", help="Genre conditioning token.")
@@ -110,17 +111,42 @@ def parse_args():
 
 def main():
     args = parse_args()
-    adapter_dir = Path(args.adapter_dir).resolve()
-    tokenizer_dir = Path(args.tokenizer_dir).resolve() if args.tokenizer_dir else adapter_dir.parent / "final_tokenizer"
-    feature_config = Path(args.feature_config).resolve() if args.feature_config else adapter_dir.parent / FEATURE_STATE_FILENAME
+    adapter_dir = Path(args.adapter_dir).resolve() if args.adapter_dir else None
+
+    if args.base_model_only:
+        if adapter_dir is not None:
+            raise ValueError("--adapter-dir cannot be used together with --base-model-only.")
+        if not args.base_model:
+            raise ValueError("--base-model is required when using --base-model-only.")
+    elif adapter_dir is None:
+        raise ValueError("--adapter-dir is required unless --base-model-only is set.")
+
+    if args.tokenizer_dir:
+        tokenizer_dir = Path(args.tokenizer_dir).resolve()
+    elif adapter_dir is not None:
+        tokenizer_dir = adapter_dir.parent / "final_tokenizer"
+    else:
+        tokenizer_dir = args.base_model
+
+    if args.feature_config:
+        feature_config = Path(args.feature_config).resolve()
+    elif adapter_dir is not None:
+        feature_config = adapter_dir.parent / FEATURE_STATE_FILENAME
+    else:
+        raise ValueError("--feature-config is required when using --base-model-only.")
+
     args.feature_state = load_feature_state(feature_config)
 
-    peft_config = PeftConfig.from_pretrained(adapter_dir)
-    base_model_name = args.base_model or peft_config.base_model_name_or_path
+    if args.base_model_only:
+        base_model_name = args.base_model
+    else:
+        peft_config = PeftConfig.from_pretrained(adapter_dir)
+        base_model_name = args.base_model or peft_config.base_model_name_or_path
 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, local_files_only=args.local_files_only)
     model = AutoModelForCausalLM.from_pretrained(base_model_name, local_files_only=args.local_files_only)
-    model = PeftModel.from_pretrained(model, adapter_dir, local_files_only=args.local_files_only)
+    if adapter_dir is not None:
+        model = PeftModel.from_pretrained(model, adapter_dir, local_files_only=args.local_files_only)
 
     if tokenizer.pad_token is None:
         if tokenizer.eos_token is None:

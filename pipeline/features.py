@@ -50,7 +50,7 @@ DEFAULT_FEATURES = {
 REQUIRED_COLUMNS = {"TITLE", "ARTIST", "LYRICS", "BPM", "ENERGY", "DANCEABILITY", "LOUDNESS", "VALENCE"}
 FEATURE_STATE_FILENAME = "feature_transform.json"
 STYLE_TAG = "mostly korean k-rap verse with occasional english phrases"
-FORMAT_TAG = "8 short rap lines"
+FORMAT_TAG = "8 rap bars, one bar per line"
 LYRICS_MARKER = "<LYRICS>:"
 
 
