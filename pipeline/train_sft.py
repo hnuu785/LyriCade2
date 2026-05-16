@@ -14,12 +14,17 @@ from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainerCallback, TrainingArguments
 
 from pipeline.features import (
-    build_completion_text,
     build_prompt,
+    apply_feature_transform,
+    build_completion_text,
     fit_feature_transform,
     load_cleaned_dataset,
     save_feature_state,
-    apply_feature_transform,
+)
+from pipeline.rhyme import (
+    _extract_line_end_spans,
+    _map_spans_to_token_positions,
+    compute_rhyme_loss,
 )
 
 
@@ -66,21 +71,30 @@ def infer_lora_targets(model):
 
 
 class PromptCompletionDataset(Dataset):
-    def __init__(self, rows, tokenizer, max_length):
+    def __init__(self, rows, tokenizer, max_length, max_rhyme_positions):
         self.examples = []
 
         for row in rows:
             prompt = build_prompt(row)
             completion = build_completion_text(row["LYRICS"])
+            sequence = f"{prompt}{completion}"
 
-            prompt_ids = tokenizer(
-                prompt,
+            prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
+            completion_ids = tokenizer(completion, add_special_tokens=False)["input_ids"]
+            offset_mapping = tokenizer(
+                sequence,
                 add_special_tokens=False,
-            )["input_ids"]
-            completion_ids = tokenizer(
-                completion,
-                add_special_tokens=False,
-            )["input_ids"]
+                truncation=True,
+                max_length=max_length,
+                return_offsets_mapping=True,
+            )["offset_mapping"]
+
+            spans = _extract_line_end_spans(sequence)
+            rhyme_positions, rhyme_targets = _map_spans_to_token_positions(
+                offset_mapping=offset_mapping,
+                spans=spans,
+                max_rhyme_positions=max_rhyme_positions,
+            )
 
             input_ids = (prompt_ids + completion_ids)[:max_length]
             attention_mask = [1] * len(input_ids)
@@ -91,6 +105,8 @@ class PromptCompletionDataset(Dataset):
                     "input_ids": input_ids,
                     "attention_mask": attention_mask,
                     "labels": labels,
+                    "rhyme_positions": rhyme_positions,
+                    "rhyme_targets": rhyme_targets,
                 }
             )
 
@@ -118,7 +134,37 @@ class SFTDataCollator:
         labels = self.tokenizer.pad(label_features, padding=True, return_tensors="pt")["input_ids"]
         labels = labels.masked_fill(batch["attention_mask"] == 0, -100)
         batch["labels"] = labels
+        batch["rhyme_positions"] = torch.stack([feature["rhyme_positions"] for feature in features])
+        batch["rhyme_targets"] = torch.stack([feature["rhyme_targets"] for feature in features])
         return batch
+
+
+class RhymeAwareTrainer(Trainer):
+    def __init__(self, *args, rhyme_loss_weight: float = 0.0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.rhyme_loss_weight = rhyme_loss_weight
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        rhyme_positions = inputs.pop("rhyme_positions", None)
+        rhyme_targets = inputs.pop("rhyme_targets", None)
+
+        outputs = model(**inputs, output_hidden_states=True)
+        loss = outputs.loss
+
+        if (
+            self.rhyme_loss_weight > 0.0
+            and rhyme_positions is not None
+            and rhyme_targets is not None
+            and outputs.hidden_states
+        ):
+            rhyme_loss = compute_rhyme_loss(
+                hidden_states=outputs.hidden_states[-1],
+                rhyme_positions=rhyme_positions,
+                rhyme_targets=rhyme_targets,
+            )
+            loss = loss + (self.rhyme_loss_weight * rhyme_loss)
+
+        return (loss, outputs) if return_outputs else loss
 
 
 class MetricsLoggerCallback(TrainerCallback):
@@ -241,6 +287,8 @@ def parse_args():
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=4)
+    parser.add_argument("--rhyme-loss-weight", type=float, default=0.1)
+    parser.add_argument("--max-rhyme-positions", type=int, default=16)
     parser.add_argument("--local-files-only", action="store_true")
     return parser.parse_args()
 
@@ -276,8 +324,18 @@ def main():
     )
     model = get_peft_model(model, lora_config)
 
-    train_dataset = PromptCompletionDataset(train_df.to_dict("records"), tokenizer, args.max_length)
-    val_dataset = PromptCompletionDataset(val_df.to_dict("records"), tokenizer, args.max_length)
+    train_dataset = PromptCompletionDataset(
+        train_df.to_dict("records"),
+        tokenizer,
+        args.max_length,
+        args.max_rhyme_positions,
+    )
+    val_dataset = PromptCompletionDataset(
+        val_df.to_dict("records"),
+        tokenizer,
+        args.max_length,
+        args.max_rhyme_positions,
+    )
 
     training_kwargs = {
         "output_dir": str(output_dir),
@@ -300,13 +358,14 @@ def main():
         training_kwargs["eval_strategy"] = "epoch"
     training_args = TrainingArguments(**training_kwargs)
 
-    trainer = Trainer(
+    trainer = RhymeAwareTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         data_collator=SFTDataCollator(tokenizer),
         tokenizer=tokenizer,
+        rhyme_loss_weight=args.rhyme_loss_weight,
         callbacks=[
             MetricsLoggerCallback(
                 experiment_id=args.experiment_id,
@@ -320,6 +379,7 @@ def main():
     print(f"Train rows: {len(train_df)}")
     print(f"Validation rows: {len(val_df)}")
     print(f"Saving checkpoints under {output_dir}")
+    print(f"Rhyme loss weight: {args.rhyme_loss_weight}")
 
     trainer.train()
 

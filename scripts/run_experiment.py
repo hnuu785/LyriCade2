@@ -67,6 +67,8 @@ def parse_args():
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument("--rhyme-loss-weight", type=float, default=0.1)
+    parser.add_argument("--max-rhyme-positions", type=int, default=16)
     parser.add_argument("--local-files-only", action="store_true")
     parser.add_argument("--mps-fallback", action="store_true")
     parser.add_argument("--sample-artist", action="append", dest="sample_artists", default=[])
@@ -120,6 +122,10 @@ def build_train_command(args):
         str(args.lora_alpha),
         "--lora-dropout",
         str(args.lora_dropout),
+        "--rhyme-loss-weight",
+        str(args.rhyme_loss_weight),
+        "--max-rhyme-positions",
+        str(args.max_rhyme_positions),
     ]
     if args.local_files_only:
         command.append("--local-files-only")
@@ -294,6 +300,8 @@ def build_markdown_report(run_record):
         f"- Max length: {config['max_length']}",
         f"- Learning rate: {config['learning_rate']}",
         f"- Seed: {config['seed']}",
+        f"- Rhyme loss weight: {config.get('rhyme_loss_weight', '')}",
+        f"- Max rhyme positions: {config.get('max_rhyme_positions', '')}",
         "",
         "### 학습 커맨드",
         "",
@@ -399,6 +407,7 @@ def build_notion_summary(run_record):
         f"- 모델: `{config['base_model']}`",
         f"- 데이터: `{Path(config['csv']).name}` {metrics.get('dataset_rows', '')}행",
         f"- 학습 설정: epoch {config['epochs']}, batch size {config['batch_size']}, gradient accumulation {config['gradient_accumulation_steps']}, max length {config['max_length']}",
+        f"- 라이밍 설정: rhyme loss weight {config.get('rhyme_loss_weight', '')}, max rhyme positions {config.get('max_rhyme_positions', '')}",
         f"- 생성 설정: max length {config['max_length']}",
         f"- 생성 라인 수: {config.get('sample_line_count', '')}",
         "",
@@ -499,6 +508,8 @@ def main():
                 "lora_r": args.lora_r,
                 "lora_alpha": args.lora_alpha,
                 "lora_dropout": args.lora_dropout,
+                "rhyme_loss_weight": args.rhyme_loss_weight,
+                "max_rhyme_positions": args.max_rhyme_positions,
                 "sample_line_count": args.sample_line_count,
                 "local_files_only": args.local_files_only,
                 "mps_fallback": args.mps_fallback,
