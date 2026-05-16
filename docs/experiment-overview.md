@@ -8,8 +8,8 @@
 현재 프로젝트의 목표는 아래와 같다.
 
 - 한국어와 영어가 섞인 가사를 생성할 수 있는 모델 만들기
-- 단순 문장 생성이 아니라 가사다운 리듬감과 장르 톤을 반영하기
-- `artist`, `genre`, `tempo`, `energy`, `valence` 같은 조건이 실제 출력에 반영되는지 확인하기
+- 단순 문장 생성이 아니라 가사다운 리듬감과 랩/힙합 톤을 반영하기
+- `artist`, `bpm`, `bpm_class`, `line_count`, `avg_chars_per_line`, `density_class` 같은 조건이 실제 출력에 반영되는지 확인하기
 - 로컬 환경에서 반복 가능한 fine-tuning 실험 루프를 만드는 것
 
 핵심은 "한국어 전용 텍스트 생성"이 아니라 "한국어/영어 code-switching lyric generation" 이다.
@@ -60,12 +60,8 @@
 - `artist`
 - `lyrics`
 - `bpm`
-- `energy`
-- `danceability`
-- `loudness`
-- `valence`
 
-현재 파이프라인은 이 정보를 feature-conditioned prompt로 직렬화해서 학습한다.
+현재 파이프라인은 이 정보와 `bpm`에서 파생한 구조 신호를 feature-conditioned prompt로 직렬화해서 학습하고, `one line = one bar` 규칙을 프롬프트에 명시한다.
 
 ## 6. 실험에서 먼저 검증할 것
 
@@ -73,7 +69,7 @@
 
 1. 파이프라인이 정상적으로 돌아가는가
 2. 생성 결과가 최소한 가사처럼 보이는가
-3. 조건(`artist`, `genre`, `tempo` 등)이 출력에 반영되는가
+3. 조건(`artist`, `bpm`, `bpm_class`, `line_count`, `avg_chars_per_line`, `density_class`)이 출력에 반영되는가
 4. 한국어/영어 혼합이 자연스럽게 나오는가
 5. 랩/힙합 톤이 살아나는가
 

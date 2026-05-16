@@ -114,18 +114,17 @@ python3 -m pipeline.generate_sft \
   --adapter-dir /Users/cho/Developer/PMTMProject/LyricGeneration/outputs/qwen-1_5b-lyrics-sft/2026-05-08/final_adapter \
   --tokenizer-dir /Users/cho/Developer/PMTMProject/LyricGeneration/outputs/qwen-1_5b-lyrics-sft/2026-05-08/final_tokenizer \
   --artist dynamicduo \
-  --track-genre k-rap \
-  --tempo 118 \
-  --energy 0.4 \
-  --valence 0.1
+  --bpm 118 \
+  --line-count 8
 ```
 
 - 입력 조건:
   - artist: `dynamicduo`
-  - genre: `k-rap`
-  - tempo: `118`
-  - energy: `0.4`
-  - valence: `0.1`
+  - bpm: `118`
+  - bpm_class: `mid`
+  - line_count: `8`
+  - avg_chars_per_line: `14`
+  - density_class: `medium`
 
 - 출력 샘플:
 
@@ -164,7 +163,7 @@ python3 -m pipeline.generate_sft \
 
 이상한 점:
 
-- `dynamicduo`, `k-rap`, `tempo 118`, `energy 0.4`, `valence 0.1` 조건이 거의 드러나지 않는다
+- `dynamicduo`, `bpm 118`, `line_count 8`, `density_class medium` 조건이 거의 드러나지 않는다
 - 출력이 사랑 노랫말/평서문 쪽으로 흐른다
 
 반복 패턴:

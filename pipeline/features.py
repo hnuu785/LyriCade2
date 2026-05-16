@@ -7,51 +7,30 @@ from pipeline.rhyme import normalize_lyrics_for_rhyme
 
 
 NUMERICAL_COLUMNS = [
-    "DURATION_MS",
-    "POPULARITY",
-    "DANCEABILITY",
-    "ENERGY",
-    "LOUDNESS",
-    "ACOUSTICNESS",
-    "INSTRUMENTALNESS",
-    "LIVENESS",
-    "VALENCE",
-    "TEMPO",
-    "EXPLICIT",
+    "BPM",
+    "LINE_COUNT",
+    "AVG_CHARS_PER_LINE",
 ]
+RAW_NUMERICAL_COLUMNS = ["BPM", "LINE_COUNT", "AVG_CHARS_PER_LINE"]
+SCALED_NUMERICAL_COLUMNS = [column for column in NUMERICAL_COLUMNS if column not in RAW_NUMERICAL_COLUMNS]
 
-CATEGORICAL_COLUMNS = ["ARTIST", "TRACK_GENRE"]
+CATEGORICAL_COLUMNS = ["ARTIST", "BPM_CLASS", "DENSITY_CLASS"]
 
-FEATURE_WEIGHTS = {
-    "TEMPO": 4.5,
-    "VALENCE": 4.0,
-    "POPULARITY": 4.0,
-    "DANCEABILITY": 3.5,
-    "ENERGY": 4.5,
-    "LOUDNESS": 3.0,
-    "ACOUSTICNESS": 3.5,
-    "INSTRUMENTALNESS": 3.5,
-    "LIVENESS": 3.0,
-    "EXPLICIT": 2.5,
-    "DURATION_MS": 1.0,
-}
+FEATURE_WEIGHTS = {}
 
 DEFAULT_FEATURES = {
-    "POPULARITY": 46.0,
-    "DURATION_MS": 211361.0,
-    "EXPLICIT": 0.0,
-    "ACOUSTICNESS": 0.1275,
-    "INSTRUMENTALNESS": 0.0000757,
-    "LIVENESS": 0.122,
-    "TEMPO": 120.034,
-    "TRACK_GENRE": "k-rap",
+    "BPM": 92.0,
+    "LINE_COUNT": 8.0,
+    "AVG_CHARS_PER_LINE": 10.0,
+    "BPM_CLASS": "붐뱁",
+    "DENSITY_CLASS": "낮은 밀도",
 }
 
-REQUIRED_COLUMNS = {"TITLE", "ARTIST", "LYRICS", "BPM", "ENERGY", "DANCEABILITY", "LOUDNESS", "VALENCE"}
+REQUIRED_COLUMNS = {"TITLE", "ARTIST", "LYRICS", "BPM", "BPM_CLASS", "LINE_COUNT", "AVG_CHARS_PER_LINE", "DENSITY_CLASS"}
 FEATURE_STATE_FILENAME = "feature_transform.json"
-STYLE_TAG = "mostly korean k-rap verse with occasional english phrases"
-FORMAT_TAG = "8 rap bars, one bar per line"
-LYRICS_MARKER = "<LYRICS>:"
+STYLE_TAG = "한국어 중심 랩 가사, 영어는 짧게만 사용"
+BAR_RULE_TAG = "한 줄은 한 마디"
+LYRICS_MARKER = "<가사>:"
 
 
 def load_cleaned_dataset(csv_path):
@@ -66,21 +45,15 @@ def load_cleaned_dataset(csv_path):
     prepared["TITLE"] = df["TITLE"].astype(str).str.strip()
     prepared["ARTIST"] = df["ARTIST"].astype(str).str.strip()
     prepared["LYRICS"] = df["LYRICS"].fillna("").apply(normalize_lyrics_for_rhyme)
-    prepared["DANCEABILITY"] = pd.to_numeric(df["DANCEABILITY"], errors="coerce")
-    prepared["ENERGY"] = pd.to_numeric(df["ENERGY"], errors="coerce")
-    prepared["LOUDNESS"] = pd.to_numeric(df["LOUDNESS"], errors="coerce")
-    prepared["VALENCE"] = pd.to_numeric(df["VALENCE"], errors="coerce")
-    prepared["TEMPO"] = pd.to_numeric(df["BPM"], errors="coerce")
+    prepared["BPM"] = pd.to_numeric(df["BPM"], errors="coerce")
+    prepared["LINE_COUNT"] = pd.to_numeric(df["LINE_COUNT"], errors="coerce")
+    prepared["AVG_CHARS_PER_LINE"] = pd.to_numeric(df["AVG_CHARS_PER_LINE"], errors="coerce")
+    prepared["BPM_CLASS"] = df["BPM_CLASS"].astype(str).str.strip()
+    prepared["DENSITY_CLASS"] = df["DENSITY_CLASS"].astype(str).str.strip()
 
-    prepared["POPULARITY"] = DEFAULT_FEATURES["POPULARITY"]
-    prepared["DURATION_MS"] = DEFAULT_FEATURES["DURATION_MS"]
-    prepared["EXPLICIT"] = DEFAULT_FEATURES["EXPLICIT"]
-    prepared["ACOUSTICNESS"] = DEFAULT_FEATURES["ACOUSTICNESS"]
-    prepared["INSTRUMENTALNESS"] = DEFAULT_FEATURES["INSTRUMENTALNESS"]
-    prepared["LIVENESS"] = DEFAULT_FEATURES["LIVENESS"]
-    prepared["TRACK_GENRE"] = DEFAULT_FEATURES["TRACK_GENRE"]
-
-    prepared["TEMPO"] = prepared["TEMPO"].fillna(DEFAULT_FEATURES["TEMPO"])
+    prepared["BPM"] = prepared["BPM"].fillna(DEFAULT_FEATURES["BPM"])
+    prepared["LINE_COUNT"] = prepared["LINE_COUNT"].fillna(DEFAULT_FEATURES["LINE_COUNT"])
+    prepared["AVG_CHARS_PER_LINE"] = prepared["AVG_CHARS_PER_LINE"].fillna(DEFAULT_FEATURES["AVG_CHARS_PER_LINE"])
 
     for column in NUMERICAL_COLUMNS:
         prepared[column] = pd.to_numeric(prepared[column], errors="coerce")
@@ -94,7 +67,7 @@ def fit_feature_transform(train_df):
     means = {}
     scales = {}
 
-    for column in NUMERICAL_COLUMNS:
+    for column in SCALED_NUMERICAL_COLUMNS:
         mean = float(train_df[column].mean())
         scale = float(train_df[column].std(ddof=0))
         if scale == 0.0:
@@ -107,17 +80,19 @@ def fit_feature_transform(train_df):
         "categorical_columns": CATEGORICAL_COLUMNS,
         "feature_weights": FEATURE_WEIGHTS,
         "defaults": DEFAULT_FEATURES,
+        "raw_numerical_columns": RAW_NUMERICAL_COLUMNS,
+        "scaled_numerical_columns": SCALED_NUMERICAL_COLUMNS,
         "means": means,
         "scales": scales,
         "style_tag": STYLE_TAG,
-        "format_tag": FORMAT_TAG,
+        "bar_rule_tag": BAR_RULE_TAG,
         "prompt_marker": LYRICS_MARKER,
     }
 
 
 def apply_feature_transform(df, feature_state):
     transformed = df.copy()
-    for column in feature_state["numerical_columns"]:
+    for column in feature_state.get("scaled_numerical_columns", feature_state["numerical_columns"]):
         mean = feature_state["means"][column]
         scale = feature_state["scales"][column]
         value = (transformed[column] - mean) / scale
@@ -126,11 +101,19 @@ def apply_feature_transform(df, feature_state):
 
 
 def build_prompt(feature_values):
-    prompt_lines = [f"<{column}: {feature_values[column]:.2f}>" for column in NUMERICAL_COLUMNS]
-    prompt_lines.extend(f"<{column}: {feature_values[column]}>" for column in CATEGORICAL_COLUMNS)
-    prompt_lines.append(f"<STYLE: {STYLE_TAG}>")
-    prompt_lines.append(f"<FORMAT: {FORMAT_TAG}>")
-    prompt_lines.append(LYRICS_MARKER)
+    bpm_value = feature_values["BPM"]
+    line_count = int(round(feature_values["LINE_COUNT"]))
+    density_value = feature_values["DENSITY_CLASS"]
+    prompt_lines = [
+        f"<아티스트: {feature_values['ARTIST']}>",
+        f"<BPM: {bpm_value:.0f}>",
+        f"<비트 스타일: {feature_values['BPM_CLASS']}>",
+        f"<줄 수: {line_count}줄>",
+        f"<{BAR_RULE_TAG}>",
+        f"<한 마디 글자 수: {density_value}>",
+        f"<가사 스타일: {STYLE_TAG}>",
+        LYRICS_MARKER,
+    ]
     return "\n".join(prompt_lines)
 
 
@@ -144,7 +127,13 @@ def build_completion_text(lyrics: str) -> str:
 
 def transform_inference_features(raw_values, feature_state):
     transformed = {}
-    for column in feature_state["numerical_columns"]:
+    raw_numerical_columns = feature_state.get("raw_numerical_columns", [])
+    scaled_numerical_columns = feature_state.get("scaled_numerical_columns", feature_state["numerical_columns"])
+
+    for column in raw_numerical_columns:
+        transformed[column] = float(raw_values.get(column, feature_state["defaults"].get(column, 0.0)))
+
+    for column in scaled_numerical_columns:
         raw_value = float(raw_values.get(column, feature_state["defaults"].get(column, 0.0)))
         mean = feature_state["means"][column]
         scale = feature_state["scales"][column]

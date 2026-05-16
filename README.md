@@ -49,10 +49,16 @@ macOS 메모:
 - `artist`
 - `lyrics`
 - `bpm`
-- `energy`
-- `danceability`
-- `loudness`
-- `valence`
+
+학습용 slim CSV를 만들려면:
+
+```bash
+python scripts/make_slim_dataset.py \
+  --input /absolute/path/to/train_kor_data_verse_only.csv \
+  --output /absolute/path/to/train_kor_data_slim.csv
+```
+
+- slim CSV는 `title`, `artist`, `lyrics`, `bpm` 외에 `bpm_class`, `line_count`, `avg_chars_per_line`, `density_class` 를 함께 만든다.
 
 verse 구간만 남긴 학습용 CSV를 만들려면:
 
@@ -78,7 +84,7 @@ python -m pipeline.prepare_dataset \
 
 ```bash
 python -m pipeline.train_sft \
-  --csv /absolute/path/to/train_kor_data_verse_only.csv \
+  --csv /absolute/path/to/train_kor_data_slim.csv \
   --output-dir /absolute/path/to/outputs/qwen-lyrics-sft \
   --model-name Qwen/Qwen2.5-7B-Instruct \
   --epochs 2 \
@@ -92,7 +98,8 @@ python -m pipeline.train_sft \
 
 - Qwen 계열 causal LM + LoRA SFT
 - prompt/completion 분리 라벨링
-- 숫자형 음악 feature를 프롬프트 토큰으로 직렬화
+- `bpm`과 파생 구조 신호(`bpm_class`, `line_count`, `avg_chars_per_line`, `density_class`)를 프롬프트 토큰으로 직렬화
+- `one line = one bar` 규칙을 프롬프트에 명시적으로 포함
 - train/inference 공통 feature transform 저장
 - `final_adapter`, `final_tokenizer`, `feature_transform.json` 저장
 
@@ -105,10 +112,8 @@ python -m pipeline.generate_sft \
   --adapter-dir /absolute/path/to/outputs/qwen-lyrics-sft/2026-05-07/final_adapter \
   --tokenizer-dir /absolute/path/to/outputs/qwen-lyrics-sft/2026-05-07/final_tokenizer \
   --artist dynamicduo \
-  --track-genre k-rap \
-  --tempo 118 \
-  --energy 0.4 \
-  --valence 0.1
+  --bpm 118 \
+  --line-count 8
 ```
 
 ## Notes

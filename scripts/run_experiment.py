@@ -72,11 +72,13 @@ def parse_args():
     parser.add_argument("--local-files-only", action="store_true")
     parser.add_argument("--mps-fallback", action="store_true")
     parser.add_argument("--sample-artist", action="append", dest="sample_artists", default=[])
-    parser.add_argument("--sample-track-genre", action="append", dest="sample_genres", default=[])
-    parser.add_argument("--sample-tempo", action="append", dest="sample_tempos", type=float, default=[])
-    parser.add_argument("--sample-energy", action="append", dest="sample_energies", type=float, default=[])
-    parser.add_argument("--sample-valence", action="append", dest="sample_valences", type=float, default=[])
-    parser.add_argument("--sample-line-count", type=int, default=8, help="Number of lyric lines/bars to format in generated samples.")
+    parser.add_argument("--sample-bpm", action="append", dest="sample_bpms", type=float, default=[])
+    parser.add_argument(
+        "--sample-line-count",
+        type=int,
+        default=8,
+        help="Retained for CLI compatibility; generated samples are no longer padded, split, or truncated to a target line count.",
+    )
     parser.add_argument("--num-beams", type=int, default=4)
     parser.add_argument("--temperature", type=float, default=0.9)
     parser.add_argument("--top-k", type=int, default=50)
@@ -199,24 +201,54 @@ def extract_metrics(stdout):
 
 def default_sample_requests(args):
     artists = args.sample_artists or ["dynamicduo"]
-    genres = args.sample_genres or ["k-rap"]
-    tempos = args.sample_tempos or [118.0]
-    energies = args.sample_energies or [0.4]
-    valences = args.sample_valences or [0.1]
+    bpms = args.sample_bpms or [118.0]
 
-    sample_count = max(len(artists), len(genres), len(tempos), len(energies), len(valences))
+    sample_count = max(len(artists), len(bpms))
     requests = []
     for idx in range(sample_count):
         requests.append(
             {
                 "artist": artists[idx] if idx < len(artists) else artists[-1],
-                "track_genre": genres[idx] if idx < len(genres) else genres[-1],
-                "tempo": tempos[idx] if idx < len(tempos) else tempos[-1],
-                "energy": energies[idx] if idx < len(energies) else energies[-1],
-                "valence": valences[idx] if idx < len(valences) else valences[-1],
+                "bpm": bpms[idx] if idx < len(bpms) else bpms[-1],
+                "bpm_class": classify_bpm(bpms[idx] if idx < len(bpms) else bpms[-1]),
+                "line_count": args.sample_line_count,
+                "avg_chars_per_line": infer_avg_chars_per_line(bpms[idx] if idx < len(bpms) else bpms[-1]),
+                "density_class": infer_density_class(infer_avg_chars_per_line(bpms[idx] if idx < len(bpms) else bpms[-1])),
             }
         )
     return requests
+
+
+def classify_bpm(bpm):
+    if bpm < 90:
+        return "very_slow"
+    if bpm < 110:
+        return "slow"
+    if bpm < 130:
+        return "mid"
+    if bpm < 150:
+        return "fast"
+    return "very_fast"
+
+
+def infer_avg_chars_per_line(bpm):
+    if bpm < 90:
+        return 9.0
+    if bpm < 110:
+        return 11.0
+    if bpm < 130:
+        return 14.0
+    if bpm < 150:
+        return 17.0
+    return 19.0
+
+
+def infer_density_class(avg_chars_per_line):
+    if avg_chars_per_line < 10:
+        return "sparse"
+    if avg_chars_per_line < 16:
+        return "medium"
+    return "dense"
 
 
 def build_generate_command(artifact_dir, request, args):
@@ -232,16 +264,16 @@ def build_generate_command(artifact_dir, request, args):
         str(tokenizer_dir),
         "--artist",
         request["artist"],
-        "--track-genre",
-        request["track_genre"],
-        "--tempo",
-        str(request["tempo"]),
-        "--energy",
-        str(request["energy"]),
-        "--valence",
-        str(request["valence"]),
+        "--bpm",
+        str(request["bpm"]),
+        "--bpm-class",
+        request["bpm_class"],
+        "--density-class",
+        request["density_class"],
         "--line-count",
-        str(args.sample_line_count),
+        str(request["line_count"]),
+        "--avg-chars-per-line",
+        str(request["avg_chars_per_line"]),
         "--max-length",
         str(args.max_length),
         "--num-beams",
@@ -332,10 +364,11 @@ def build_markdown_report(run_record):
                     f"### Sample {index}",
                     "",
                     f"- artist: `{conditions['artist']}`",
-                    f"- track_genre: `{conditions['track_genre']}`",
-                    f"- tempo: `{conditions['tempo']}`",
-                    f"- energy: `{conditions['energy']}`",
-                    f"- valence: `{conditions['valence']}`",
+                    f"- bpm: `{conditions['bpm']}`",
+                    f"- bpm_class: `{conditions.get('bpm_class', '')}`",
+                    f"- density_class: `{conditions.get('density_class', '')}`",
+                    f"- line_count: `{conditions.get('line_count', '')}`",
+                    f"- avg_chars_per_line: `{conditions.get('avg_chars_per_line', '')}`",
                     "",
                     "#### 생성 커맨드",
                     "",
@@ -409,7 +442,6 @@ def build_notion_summary(run_record):
         f"- 학습 설정: epoch {config['epochs']}, batch size {config['batch_size']}, gradient accumulation {config['gradient_accumulation_steps']}, max length {config['max_length']}",
         f"- 라이밍 설정: rhyme loss weight {config.get('rhyme_loss_weight', '')}, max rhyme positions {config.get('max_rhyme_positions', '')}",
         f"- 생성 설정: max length {config['max_length']}",
-        f"- 생성 라인 수: {config.get('sample_line_count', '')}",
         "",
         "### 실행",
         "",
@@ -431,10 +463,11 @@ def build_notion_summary(run_record):
             [
                 "- 샘플 조건:",
                 f"  - artist: `{conditions['artist']}`",
-                f"  - track_genre: `{conditions['track_genre']}`",
-                f"  - tempo: `{conditions['tempo']}`",
-                f"  - energy: `{conditions['energy']}`",
-                f"  - valence: `{conditions['valence']}`",
+                f"  - bpm: `{conditions['bpm']}`",
+                f"  - bpm_class: `{conditions.get('bpm_class', '')}`",
+                f"  - density_class: `{conditions.get('density_class', '')}`",
+                f"  - line_count: `{conditions.get('line_count', '')}`",
+                f"  - avg_chars_per_line: `{conditions.get('avg_chars_per_line', '')}`",
                 "",
                 "- 샘플 출력:",
                 "",

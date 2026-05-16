@@ -1,5 +1,4 @@
 import argparse
-import re
 from pathlib import Path
 
 import torch
@@ -17,65 +16,48 @@ def get_device():
     return torch.device("cpu")
 
 
+def classify_bpm(bpm: float) -> str:
+    if bpm <= 110:
+        return "붐뱁"
+    return "트랩"
+
+
+def infer_density_class(avg_chars_per_line: float) -> str:
+    if avg_chars_per_line < 10:
+        return "적은 밀도"
+    if avg_chars_per_line < 16:
+        return "보통 밀도"
+    return "높은 밀도"
+
+
+def infer_avg_chars_per_line(bpm: float) -> float:
+    if bpm < 90:
+        return 9.0
+    if bpm < 110:
+        return 11.0
+    if bpm < 130:
+        return 14.0
+    if bpm < 150:
+        return 17.0
+    return 19.0
+
+
 def build_feature_prompt(args):
+    avg_chars_per_line = args.avg_chars_per_line if args.avg_chars_per_line is not None else infer_avg_chars_per_line(args.bpm)
     raw_values = {
-        "DURATION_MS": args.duration_ms,
-        "POPULARITY": args.popularity,
-        "DANCEABILITY": args.danceability,
-        "ENERGY": args.energy,
-        "LOUDNESS": args.loudness,
-        "ACOUSTICNESS": args.acousticness,
-        "INSTRUMENTALNESS": args.instrumentalness,
-        "LIVENESS": args.liveness,
-        "VALENCE": args.valence,
-        "TEMPO": args.tempo,
-        "EXPLICIT": args.explicit,
+        "BPM": args.bpm,
+        "LINE_COUNT": args.line_count,
+        "AVG_CHARS_PER_LINE": avg_chars_per_line,
         "ARTIST": args.artist,
-        "TRACK_GENRE": args.track_genre,
+        "BPM_CLASS": args.bpm_class or classify_bpm(args.bpm),
+        "DENSITY_CLASS": args.density_class or infer_density_class(avg_chars_per_line),
     }
     transformed_values = transform_inference_features(raw_values, args.feature_state)
     return build_prompt(transformed_values)
 
-
-def _split_line(line: str):
-    segments = [segment.strip() for segment in re.split(r"(?<=[,?!.;])\s+|,\s+|(?<=\))\s+", line) if segment.strip()]
-    return segments or [line.strip()]
-
-
-def _split_longest_line(lines):
-    if not lines:
-        return lines
-
-    longest_index = max(range(len(lines)), key=lambda idx: len(lines[idx].split()))
-    words = lines[longest_index].split()
-    if len(words) < 2:
-        return lines
-
-    midpoint = max(1, len(words) // 2)
-    replacement = [" ".join(words[:midpoint]).strip(), " ".join(words[midpoint:]).strip()]
-    return lines[:longest_index] + replacement + lines[longest_index + 1 :]
-
-
 def format_generated_lyrics(text: str, line_count: int) -> str:
     raw_lines = [line.strip() for line in text.replace("\r", "\n").split("\n") if line.strip()]
-
-    lines = []
-    for raw_line in raw_lines:
-        lines.extend(_split_line(raw_line))
-
-    if not lines:
-        return ""
-
-    while len(lines) < line_count:
-        updated_lines = _split_longest_line(lines)
-        if updated_lines == lines:
-            break
-        lines = [line for line in updated_lines if line.strip()]
-
-    if len(lines) > line_count:
-        lines = lines[:line_count]
-
-    return "\n".join(line.strip() for line in lines if line.strip())
+    return "\n".join(raw_lines)
 
 
 def parse_args():
@@ -86,25 +68,17 @@ def parse_args():
     parser.add_argument("--tokenizer-dir", help="Optional tokenizer directory. Defaults to adapter parent/final_tokenizer, or the base model in --base-model-only mode.")
     parser.add_argument("--feature-config", help="Optional feature transform JSON. Defaults to the adapter parent dir.")
     parser.add_argument("--artist", default="unknown", help="Artist conditioning token.")
-    parser.add_argument("--track-genre", default="k-rap", help="Genre conditioning token.")
-    parser.add_argument("--duration-ms", type=float, default=211361.0)
-    parser.add_argument("--popularity", type=float, default=46.0)
-    parser.add_argument("--danceability", type=float, default=0.0)
-    parser.add_argument("--energy", type=float, default=0.0)
-    parser.add_argument("--loudness", type=float, default=0.0)
-    parser.add_argument("--acousticness", type=float, default=0.0)
-    parser.add_argument("--instrumentalness", type=float, default=0.0)
-    parser.add_argument("--liveness", type=float, default=0.0)
-    parser.add_argument("--valence", type=float, default=0.0)
-    parser.add_argument("--tempo", type=float, default=120.0)
-    parser.add_argument("--explicit", type=float, default=0.0)
+    parser.add_argument("--bpm", type=float, default=120.0)
+    parser.add_argument("--bpm-class", help="Optional BPM class override such as 붐뱁 or 트랩.")
+    parser.add_argument("--density-class", help="Optional density class override such as 적은 밀도, 보통 밀도, or 높은 밀도.")
+    parser.add_argument("--line-count", type=float, default=8.0, help="Target verse line count used in the prompt.")
+    parser.add_argument("--avg-chars-per-line", type=float, help="Optional average visible chars per line target.")
     parser.add_argument("--max-length", type=int, default=256)
     parser.add_argument("--min-length", type=int, default=64)
     parser.add_argument("--num-beams", type=int, default=4)
     parser.add_argument("--temperature", type=float, default=0.9)
     parser.add_argument("--top-k", type=int, default=50)
     parser.add_argument("--top-p", type=float, default=0.92)
-    parser.add_argument("--line-count", type=int, default=8, help="Number of lyric lines/bars to format in the output.")
     parser.add_argument("--local-files-only", action="store_true")
     return parser.parse_args()
 
@@ -174,7 +148,7 @@ def main():
     )
     decoded = tokenizer.decode(output[0], skip_special_tokens=True)
     generated = decoded.split("<LYRICS>:", maxsplit=1)[-1].strip()
-    formatted = format_generated_lyrics(generated, line_count=args.line_count)
+    formatted = format_generated_lyrics(generated, line_count=int(args.line_count))
     print(formatted)
 
 

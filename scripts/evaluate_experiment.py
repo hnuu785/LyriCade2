@@ -39,12 +39,12 @@ def score_sample(text, conditions):
     bilingual_mixing = 8 if has_mixing else 1
 
     conditioning_fidelity = 2
-    genre = conditions.get("track_genre", "").lower()
     artist = conditions.get("artist", "").lower()
+    target_line_count = int(float(conditions.get("line_count", 0) or 0))
     lowered = stripped.lower()
-    if "rap" in genre and english_word_count > 0:
-        conditioning_fidelity += 1
     if artist and artist in lowered:
+        conditioning_fidelity += 1
+    if target_line_count and abs(line_count - target_line_count) <= 1:
         conditioning_fidelity += 1
     conditioning_fidelity = min(conditioning_fidelity, 10)
 
@@ -119,7 +119,7 @@ def summarize_run(run_data):
         elif avg_scores.get("lyricness", 0) < 5:
             result = "weak-lyricness"
 
-    next_hypothesis = "prompt format을 강화하고 epoch를 늘려 conditioning fidelity와 bilingual mixing을 개선한다."
+    next_hypothesis = "artist와 bpm 조건이 더 직접적으로 드러나도록 prompt 구조와 데이터 구성을 단순화한다."
     if avg_scores and avg_scores.get("bilingual_mixing", 0) <= 2:
         next_hypothesis = "prompt에 bilingual style 지시를 추가해 한국어/영어 혼합 출력을 유도한다."
 
