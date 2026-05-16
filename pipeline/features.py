@@ -49,7 +49,8 @@ DEFAULT_FEATURES = {
 
 REQUIRED_COLUMNS = {"TITLE", "ARTIST", "LYRICS", "BPM", "ENERGY", "DANCEABILITY", "LOUDNESS", "VALENCE"}
 FEATURE_STATE_FILENAME = "feature_transform.json"
-STYLE_TAG = "bilingual korean-english rap verse"
+STYLE_TAG = "mostly korean k-rap verse with occasional english phrases"
+FORMAT_TAG = "8 short rap lines"
 LYRICS_MARKER = "<LYRICS>:"
 
 
@@ -109,6 +110,7 @@ def fit_feature_transform(train_df):
         "means": means,
         "scales": scales,
         "style_tag": STYLE_TAG,
+        "format_tag": FORMAT_TAG,
         "prompt_marker": LYRICS_MARKER,
     }
 
@@ -127,6 +129,7 @@ def build_prompt(feature_values):
     prompt_lines = [f"<{column}: {feature_values[column]:.2f}>" for column in NUMERICAL_COLUMNS]
     prompt_lines.extend(f"<{column}: {feature_values[column]}>" for column in CATEGORICAL_COLUMNS)
     prompt_lines.append(f"<STYLE: {STYLE_TAG}>")
+    prompt_lines.append(f"<FORMAT: {FORMAT_TAG}>")
     prompt_lines.append(LYRICS_MARKER)
     return "\n".join(prompt_lines)
 
