@@ -28,8 +28,7 @@ DEFAULT_FEATURES = {
 
 REQUIRED_COLUMNS = {"TITLE", "ARTIST", "LYRICS", "BPM", "BPM_CLASS", "LINE_COUNT", "AVG_CHARS_PER_LINE", "DENSITY_CLASS"}
 FEATURE_STATE_FILENAME = "feature_transform.json"
-STYLE_TAG = "한국어 중심 랩 가사, 영어는 짧게만 사용"
-BAR_RULE_TAG = "한 줄은 한 마디"
+STYLE_TAG = "언어는 한국어와 영어를 자유롭게 사용해."
 LYRICS_MARKER = "<가사>:"
 
 
@@ -85,7 +84,6 @@ def fit_feature_transform(train_df):
         "means": means,
         "scales": scales,
         "style_tag": STYLE_TAG,
-        "bar_rule_tag": BAR_RULE_TAG,
         "prompt_marker": LYRICS_MARKER,
     }
 
@@ -103,18 +101,15 @@ def apply_feature_transform(df, feature_state):
 def build_prompt(feature_values):
     bpm_value = feature_values["BPM"]
     line_count = int(round(feature_values["LINE_COUNT"]))
-    density_value = feature_values["DENSITY_CLASS"]
-    prompt_lines = [
-        f"<아티스트: {feature_values['ARTIST']}>",
-        f"<BPM: {bpm_value:.0f}>",
-        f"<비트 스타일: {feature_values['BPM_CLASS']}>",
-        f"<줄 수: {line_count}줄>",
-        f"<{BAR_RULE_TAG}>",
-        f"<한 마디 글자 수: {density_value}>",
-        f"<가사 스타일: {STYLE_TAG}>",
-        LYRICS_MARKER,
-    ]
-    return "\n".join(prompt_lines)
+    return "\n".join(
+        [
+            f"BPM {bpm_value:.0f}의 {feature_values['BPM_CLASS']} 비트에 맞춰 {feature_values['ARTIST']} 스타일의 랩 가사를 {line_count}마디 작성해.",
+            f"한 줄이 한 마디이며, 줄바꿈해서 {line_count}줄 써.",
+            "출력은 가사만 작성하고 설명은 쓰지 마.",
+            STYLE_TAG,
+            LYRICS_MARKER,
+        ]
+    )
 
 
 def build_training_sequence(row):
