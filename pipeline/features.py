@@ -28,8 +28,8 @@ DEFAULT_FEATURES = {
 
 REQUIRED_COLUMNS = {"TITLE", "ARTIST", "LYRICS", "BPM", "BPM_CLASS", "LINE_COUNT", "AVG_CHARS_PER_LINE", "DENSITY_CLASS"}
 FEATURE_STATE_FILENAME = "feature_transform.json"
-STYLE_TAG = "한국어 중심 랩 가사, 영어는 짧게만 사용"
-BAR_RULE_TAG = "한 줄은 한 마디"
+STYLE_TAG = "한국어 영어 혼용 랩 가사"
+BAR_RULE_TAG = "한 줄은 한 마디로 끊기"
 LYRICS_MARKER = "<가사>:"
 
 
